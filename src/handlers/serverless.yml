@@ -1,0 +1,142 @@
+service: ${file(../../defaults.yml):service}-logShipper
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, "dev"}
+  region: ${opt:region, "eu-west-1"}
+  architecture: arm64
+  stackTags: ${self:custom.tags}
+
+custom:
+  tags: ${file(../../defaults.yml):custom.tags}
+  params: ${file(../../defaults.yml):custom.params.${self:provider.stage}}
+
+functions:
+  shipLogs:
+    name: logShipper-${self:provider.stage}
+    description: "Function that ships logs to Kinesis using telemetry api"
+    handler: src/handlers/logShip/index.handler
+    timeout: 30
+    memorySize: 256
+    logRetentionInDays: ${self:custom.params.RetentionInDays}
+    role: LambdaRole
+
+    environment:
+      REGION: ${self:provider.region}
+      ENV: ${self:provider.stage}
+      STREAM_ARN: ${cf:flink-lambda-log-kinesis-${self:provider.stage}.StreamArn}
+      
+    layers:
+      - ${cf:flink-lambda-log-layer-${self:provider.stage}.LayerArn}
+
+  updateMemory:
+    name: memory-updater-${self:provider.stage}
+    description: "Function that updates the memory of other functions"
+    handler: src/handlers/updateMemory/index.handler
+    timeout: 30
+    memorySize: 256
+    logRetentionInDays: ${self:custom.params.RetentionInDays}
+    role: updateMemoryRole
+
+    environment:
+      REGION: ${self:provider.region}
+      ENV: ${self:provider.stage}
+
+    events:
+      - stream:
+          type: kinesis
+          arn: ${cf:flink-lambda-log-kinesis-${self:provider.stage}.DestinationStreamArn}
+          enabled: true      
+
+resources:
+  Resources:
+    LambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: log-ship-role
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: log-ship-policy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - xray:PutTraceSegments
+                    - xray:PutTelemetryRecords
+                    - xray:GetSamplingRules
+                    - xray:GetSamplingTargets
+                    - xray:GetSamplingStatisticSummaries
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:CreateLogGroup
+                    - logs:PutLogEvents
+                  Resource:
+                    - arn:aws:logs:${self:provider.region}:${aws:accountId}:log-group:/aws/lambda/logShipper-${self:provider.stage}:*
+                - Effect: Allow
+                  Action:
+                    - kinesis:Put*
+                  Resource:
+                    - ${cf:flink-lambda-log-kinesis-${self:provider.stage}.StreamArn}
+                - Effect: Allow
+                  Action:
+                    - s3:*
+                  Resource:
+                    - arn:aws:s3:::${cf:flink-lambda-log-bucket-${self:provider.stage}.S3BucketName}
+                    - arn:aws:s3:::${cf:flink-lambda-log-bucket-${self:provider.stage}.S3BucketName}/*
+
+    updateMemoryRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: memory-update-role
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: memory-update-policy
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - xray:PutTraceSegments
+                    - xray:PutTelemetryRecords
+                    - xray:GetSamplingRules
+                    - xray:GetSamplingTargets
+                    - xray:GetSamplingStatisticSummaries
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - logs:CreateLogStream
+                    - logs:CreateLogGroup
+                    - logs:PutLogEvents
+                  Resource:
+                    - arn:aws:logs:${self:provider.region}:${aws:accountId}:log-group:/aws/lambda/logShipper-${self:provider.stage}:*
+                - Effect: Allow
+                  Action:
+                    - kinesis:Get*
+                    - kinesis:Describe*
+                    - kinesis:List*
+                  Resource:
+                    - ${cf:flink-lambda-log-kinesis-${self:provider.stage}.DestinationStreamArn}
+                - Effect: Allow
+                  Action:
+                    - lambda:UpdateFunctionConfiguration
+                  Resource: "*"               

@@ -1,0 +1,37 @@
+service: flink-lambda-log
+provider:
+  runtime: nodejs18.x
+  # deploymentBucket:
+  #   name: ""
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    AWS_ACCOUNT_ID: '#{AWS::AccountId}'
+
+custom:
+  # base naming convention
+  base: ${self:service}-${self:provider.stage}
+
+  # tags for resources
+  tags:
+    application: CEP-Flink-Lambda-Log
+    environment: ${self:provider.stage}
+
+
+  # params
+  params:   
+    dev:
+      CheckpointInterval: 60000
+      MinPauseBetweenCheckpoints: 5000
+      CheckpointingEnabled: true
+      DEBUG_MODE: true
+      Parallelism: 1
+      ParallelismPerKPU: 1
+      AutoScalingEnabled: true      
+      MetricsLevel: APPLICATION
+      LogLevel: INFO      
+      FileKey: Lambda_log-1.0.0.jar
+      LogStreamName: cepFlinkLambdaMetricsKdaLogStream-dev
+      LogGroupName: /aws/kinesis-analytics/cepFlinkLambdaMetricsKdaLogGroup-dev
+      RetentionInDays: 1
+      LogFilterPattern: '{$.locationInformation = "com.aircanada.flinklambda*"}'

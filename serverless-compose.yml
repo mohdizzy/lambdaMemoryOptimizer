@@ -1,0 +1,16 @@
+# serverless-compose.yml
+services:
+  s3:
+    path: resources/s3/
+
+  kinesis:
+    path: resources/kinesis/
+
+  layer:
+    path: resources/layer/
+
+  flink:
+    path: resources/flink/
+
+  lambda:
+    path: src/handlers/

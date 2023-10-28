@@ -1,0 +1,47 @@
+service: ${file(../../defaults.yml):service}-bucket
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, "dev"}
+  region: ${opt:region, "eu-west-1"}
+  stackTags: ${self:custom.tags}
+      
+plugins:
+  - serverless-s3-deploy
+
+custom:
+  tags: ${file(../../defaults.yml):custom.tags}
+  params: ${file(../../defaults.yml):custom.params.${self:provider.stage}}
+  s3BucketName: ${self:service}-${self:provider.stage}
+  assets:
+    auto: true
+    targets:
+      - bucket: 
+          Ref: S3Bucket
+        files:
+          - source: ../../flink/target/
+            globs: ${self:custom.params.FileKey}
+          - source: ../../
+            globs: extension.zip
+
+resources:
+  Resources:
+    S3Bucket:
+      Type: 'AWS::S3::Bucket'
+      Properties:
+        BucketName: ${self:custom.s3BucketName}
+        VersioningConfiguration: 
+          Status: Enabled
+
+  Outputs:
+    S3BucketName:
+      Value:
+        Ref: S3Bucket
+      Export:
+        Name: ${self:service}-${self:provider.stage}-s3-name
+    S3BucketArn:
+      Value:
+        Fn::GetAtt: S3Bucket.Arn
+      Export: 
+        Name: ${self:service}-${self:provider.stage}-s3-arn

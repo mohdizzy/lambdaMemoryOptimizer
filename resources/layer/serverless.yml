@@ -1,0 +1,37 @@
+service: ${file(../../defaults.yml):service}-layer
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, "dev"}
+  region: ${opt:region, "eu-west-1"}
+  stackTags: ${self:custom.tags}
+
+
+custom:
+  tags: ${file(../../defaults.yml):custom.tags}
+  params: ${file(../../defaults.yml):custom.params.${self:provider.stage}}
+
+resources:
+  Resources:
+    extensionLayer:
+      Type: AWS::Lambda::LayerVersion
+      Properties: 
+        CompatibleArchitectures: 
+          - arm64
+        CompatibleRuntimes: 
+          - nodejs18.x
+        Content: 
+          S3Bucket: ${cf:flink-lambda-log-bucket-${self:provider.stage}.S3BucketName}
+          S3Key: extension.zip
+          # specify object version if there is an update to layer code
+          # S3ObjectVersion: "CSElku8GCAVoNpO2atS_tAA.DZnSmzcL"
+        Description: Lambda extension telemetry API layer ships to Kinesis
+        LayerName: telemetry_api_kinesis_log_shipper
+
+  Outputs:
+    LayerArn:
+      Value:
+        Ref: extensionLayer
+      Export: 
+        Name: LambdaLayerARN

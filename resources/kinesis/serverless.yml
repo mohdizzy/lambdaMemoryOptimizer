@@ -1,0 +1,47 @@
+service: ${file(../../defaults.yml):service}-kinesis
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: ${opt:stage, "dev"}
+  region: ${opt:region, "eu-west-1"}
+  stackTags: ${self:custom.tags}
+
+custom:
+  tags: ${file(../../defaults.yml):custom.tags}
+  params: ${file(../../defaults.yml):custom.params.${self:provider.stage}}
+
+resources:
+  Resources:
+    logStream:
+      Type: AWS::Kinesis::Stream
+      Properties: 
+        Name: lambda_log_stream
+        ShardCount: 1
+
+    destinationLogStream:
+      Type: AWS::Kinesis::Stream
+      Properties: 
+        Name: lambda_command_stream
+        ShardCount: 1        
+
+
+  Outputs:
+    StreamArn:
+      Value:
+        Fn::GetAtt: logStream.Arn
+      Export: 
+        Name: log-stream-arn
+    StreamName:
+      Value: !Ref logStream
+      Export: 
+        Name: log-stream-name        
+    DestinationStreamArn:
+      Value:
+        Fn::GetAtt: destinationLogStream.Arn
+      Export: 
+        Name: command-stream-arn  
+    DestinationStreamName:
+      Value: !Ref destinationLogStream
+      Export: 
+        Name: command-stream-name                
